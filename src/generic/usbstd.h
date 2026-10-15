@@ -41,6 +41,7 @@ struct usb_ctrlrequest {
 #define USB_DT_ENDPOINT                 0x05
 #define USB_DT_DEVICE_QUALIFIER         0x06
 #define USB_DT_OTHER_SPEED_CONFIG       0x07
+#define USB_DT_INTERFACE_ASSOC          0x0B
 #define USB_DT_ENDPOINT_COMPANION       0x30
 
 struct usb_device_descriptor {
@@ -70,6 +71,7 @@ struct usb_device_descriptor {
 #define USB_CLASS_PRINTER               7
 #define USB_CLASS_MASS_STORAGE          8
 #define USB_CLASS_HUB                   9
+#define USB_CLASS_MISC                  0xEF
 
 struct usb_config_descriptor {
     uint8_t  bLength;
@@ -94,6 +96,18 @@ struct usb_interface_descriptor {
     uint8_t  bInterfaceSubClass;
     uint8_t  bInterfaceProtocol;
     uint8_t  iInterface;
+} PACKED;
+
+struct usb_interface_assoc_descriptor {
+    uint8_t  bLength;
+    uint8_t  bDescriptorType;
+
+    uint8_t  bFirstInterface;
+    uint8_t  bInterfaceCount;
+    uint8_t  bFunctionClass;
+    uint8_t  bFunctionSubClass;
+    uint8_t  bFunctionProtocol;
+    uint8_t  iFunction;
 } PACKED;
 
 struct usb_endpoint_descriptor {
