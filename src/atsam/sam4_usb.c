@@ -91,6 +91,20 @@ usb_send_bulk_in(void *data, uint_fast8_t len)
     return bulk_in_send(USB_CDC_EP_BULK_IN, data, len);
 }
 
+#if CONFIG_USB_CDC_BRIDGE
+int_fast8_t
+usb_read_bulk_out2(void *data, uint_fast8_t max_len)
+{
+    static uint32_t next_bk = UDP_CSR_RX_DATA_BK0;
+    return bulk_out_read(USB_CDC2_EP_BULK_OUT, &next_bk, data, max_len);
+}
+
+int_fast8_t
+usb_send_bulk_in2(void *data, uint_fast8_t len)
+{
+    return bulk_in_send(USB_CDC2_EP_BULK_IN, data, len);
+}
+#endif
 
 int_fast8_t
 usb_read_ep0(void *data, uint_fast8_t max_len)
@@ -173,6 +187,11 @@ usb_set_configure(void)
     UDP->UDP_CSR[USB_CDC_EP_ACM] = CSR_ACM;
     UDP->UDP_CSR[USB_CDC_EP_BULK_OUT] = CSR_BULK_OUT;
     UDP->UDP_CSR[USB_CDC_EP_BULK_IN] = CSR_BULK_IN;
+#if CONFIG_USB_CDC_BRIDGE
+    UDP->UDP_CSR[USB_CDC2_EP_ACM] = CSR_ACM;
+    UDP->UDP_CSR[USB_CDC2_EP_BULK_OUT] = CSR_BULK_OUT;
+    UDP->UDP_CSR[USB_CDC2_EP_BULK_IN] = CSR_BULK_IN;
+#endif
     UDP->UDP_GLB_STAT |= UDP_GLB_STAT_CONFG;
 }
 
@@ -211,6 +230,12 @@ UDP_Handler(void)
         usb_notify_bulk_out();
     if (s & (1<<USB_CDC_EP_BULK_IN))
         usb_notify_bulk_in();
+#if CONFIG_USB_CDC_BRIDGE
+    if (s & (1<<USB_CDC2_EP_BULK_OUT))
+        usb_notify_bulk_out2();
+    if (s & (1<<USB_CDC2_EP_BULK_IN))
+        usb_notify_bulk_in2();
+#endif
 }
 
 DECL_CONSTANT_STR("RESERVE_PINS_USB", "PB10,PB11");
