@@ -15,6 +15,9 @@
 #include "generic/usbstd_cdc.h" // struct usb_cdc_header_descriptor
 #include "sched.h" // sched_wake_task
 #include "usb_cdc.h" // usb_notify_ep0
+#if CONFIG_USB_CDC_BRIDGE
+#include "generic/usb_cdc_bridge.h" // usb_bridge_set_line_coding
+#endif
 
 // To debug a USB connection over UART, uncomment the two macros
 // below, alter the board KConfig to "select USBSERIAL" on a serial
@@ -182,12 +185,27 @@ static const struct usb_string_descriptor cdc_string_serial PROGMEM = {
     .data = USB_STR_SERIAL,
 };
 
+#if CONFIG_USB_CDC_BRIDGE
+// Interface numbers of the second CDC function (the UART bridge)
+enum { USB_CDC2_IFACE_COMM = 2, USB_CDC2_IFACE_DATA = 3 };
+#define USB_CDC_NUM_IFACES 4
+#else
+#define USB_CDC_NUM_IFACES 2
+#endif
+
 // Device descriptor
 static const struct usb_device_descriptor cdc_device_descriptor PROGMEM = {
     .bLength = sizeof(cdc_device_descriptor),
     .bDescriptorType = USB_DT_DEVICE,
     .bcdUSB = cpu_to_le16(0x0200),
+#if CONFIG_USB_CDC_BRIDGE
+    // Composite device using interface association descriptors
+    .bDeviceClass = USB_CLASS_MISC,
+    .bDeviceSubClass = 0x02,
+    .bDeviceProtocol = 0x01,
+#else
     .bDeviceClass = USB_CLASS_COMM,
+#endif
     .bMaxPacketSize0 = USB_CDC_EP0_SIZE,
     .idVendor = cpu_to_le16(CONFIG_USB_VENDOR_ID),
     .idProduct = cpu_to_le16(CONFIG_USB_DEVICE_ID),
@@ -201,6 +219,9 @@ static const struct usb_device_descriptor cdc_device_descriptor PROGMEM = {
 // Config descriptor
 static const struct config_s {
     struct usb_config_descriptor config;
+#if CONFIG_USB_CDC_BRIDGE
+    struct usb_interface_assoc_descriptor iad0;
+#endif
     struct usb_interface_descriptor iface0;
     struct usb_cdc_header_descriptor cdc_hdr;
     struct usb_cdc_acm_descriptor cdc_acm;
@@ -209,16 +230,38 @@ static const struct config_s {
     struct usb_interface_descriptor iface1;
     struct usb_endpoint_descriptor ep2;
     struct usb_endpoint_descriptor ep3;
+#if CONFIG_USB_CDC_BRIDGE
+    struct usb_interface_assoc_descriptor iad1;
+    struct usb_interface_descriptor iface2;
+    struct usb_cdc_header_descriptor cdc_hdr2;
+    struct usb_cdc_acm_descriptor cdc_acm2;
+    struct usb_cdc_union_descriptor cdc_union2;
+    struct usb_endpoint_descriptor ep4;
+    struct usb_interface_descriptor iface3;
+    struct usb_endpoint_descriptor ep5;
+    struct usb_endpoint_descriptor ep6;
+#endif
 } PACKED cdc_config_descriptor PROGMEM = {
     .config = {
         .bLength = sizeof(cdc_config_descriptor.config),
         .bDescriptorType = USB_DT_CONFIG,
         .wTotalLength = cpu_to_le16(sizeof(cdc_config_descriptor)),
-        .bNumInterfaces = 2,
+        .bNumInterfaces = USB_CDC_NUM_IFACES,
         .bConfigurationValue = 1,
         .bmAttributes = 0xC0,
         .bMaxPower = 50,
     },
+#if CONFIG_USB_CDC_BRIDGE
+    .iad0 = {
+        .bLength = sizeof(cdc_config_descriptor.iad0),
+        .bDescriptorType = USB_DT_INTERFACE_ASSOC,
+        .bFirstInterface = 0,
+        .bInterfaceCount = 2,
+        .bFunctionClass = USB_CLASS_COMM,
+        .bFunctionSubClass = USB_CDC_SUBCLASS_ACM,
+        .bFunctionProtocol = USB_CDC_ACM_PROTO_AT_V25TER,
+    },
+#endif
     .iface0 = {
         .bLength = sizeof(cdc_config_descriptor.iface0),
         .bDescriptorType = USB_DT_INTERFACE,
@@ -276,6 +319,74 @@ static const struct config_s {
         .bmAttributes = USB_ENDPOINT_XFER_BULK,
         .wMaxPacketSize = cpu_to_le16(USB_CDC_EP_BULK_IN_SIZE),
     },
+#if CONFIG_USB_CDC_BRIDGE
+    .iad1 = {
+        .bLength = sizeof(cdc_config_descriptor.iad1),
+        .bDescriptorType = USB_DT_INTERFACE_ASSOC,
+        .bFirstInterface = USB_CDC2_IFACE_COMM,
+        .bInterfaceCount = 2,
+        .bFunctionClass = USB_CLASS_COMM,
+        .bFunctionSubClass = USB_CDC_SUBCLASS_ACM,
+        .bFunctionProtocol = USB_CDC_ACM_PROTO_AT_V25TER,
+    },
+    .iface2 = {
+        .bLength = sizeof(cdc_config_descriptor.iface2),
+        .bDescriptorType = USB_DT_INTERFACE,
+        .bInterfaceNumber = USB_CDC2_IFACE_COMM,
+        .bNumEndpoints = 1,
+        .bInterfaceClass = USB_CLASS_COMM,
+        .bInterfaceSubClass = USB_CDC_SUBCLASS_ACM,
+        .bInterfaceProtocol = USB_CDC_ACM_PROTO_AT_V25TER,
+    },
+    .cdc_hdr2 = {
+        .bLength = sizeof(cdc_config_descriptor.cdc_hdr2),
+        .bDescriptorType = USB_CDC_CS_INTERFACE,
+        .bDescriptorSubType = USB_CDC_HEADER_TYPE,
+        .bcdCDC = 0x0110,
+    },
+    .cdc_acm2 = {
+        .bLength = sizeof(cdc_config_descriptor.cdc_acm2),
+        .bDescriptorType = USB_CDC_CS_INTERFACE,
+        .bDescriptorSubType = USB_CDC_ACM_TYPE,
+        .bmCapabilities = 0x02,    // line coding only, no send-break
+    },
+    .cdc_union2 = {
+        .bLength = sizeof(cdc_config_descriptor.cdc_union2),
+        .bDescriptorType = USB_CDC_CS_INTERFACE,
+        .bDescriptorSubType = USB_CDC_UNION_TYPE,
+        .bMasterInterface0 = USB_CDC2_IFACE_COMM,
+        .bSlaveInterface0 = USB_CDC2_IFACE_DATA,
+    },
+    .ep4 = {
+        .bLength = sizeof(cdc_config_descriptor.ep4),
+        .bDescriptorType = USB_DT_ENDPOINT,
+        .bEndpointAddress = USB_CDC2_EP_ACM | USB_DIR_IN,
+        .bmAttributes = USB_ENDPOINT_XFER_INT,
+        .wMaxPacketSize = cpu_to_le16(USB_CDC2_EP_ACM_SIZE),
+        .bInterval = 255,
+    },
+    .iface3 = {
+        .bLength = sizeof(cdc_config_descriptor.iface3),
+        .bDescriptorType = USB_DT_INTERFACE,
+        .bInterfaceNumber = USB_CDC2_IFACE_DATA,
+        .bNumEndpoints = 2,
+        .bInterfaceClass = 0x0A,
+    },
+    .ep5 = {
+        .bLength = sizeof(cdc_config_descriptor.ep5),
+        .bDescriptorType = USB_DT_ENDPOINT,
+        .bEndpointAddress = USB_CDC2_EP_BULK_OUT,
+        .bmAttributes = USB_ENDPOINT_XFER_BULK,
+        .wMaxPacketSize = cpu_to_le16(USB_CDC2_EP_BULK_OUT_SIZE),
+    },
+    .ep6 = {
+        .bLength = sizeof(cdc_config_descriptor.ep6),
+        .bDescriptorType = USB_DT_ENDPOINT,
+        .bEndpointAddress = USB_CDC2_EP_BULK_IN | USB_DIR_IN,
+        .bmAttributes = USB_ENDPOINT_XFER_BULK,
+        .wMaxPacketSize = cpu_to_le16(USB_CDC2_EP_BULK_IN_SIZE),
+    },
+#endif
 };
 
 // List of available descriptors
@@ -328,6 +439,11 @@ enum {
 
 static void *usb_xfer_data;
 static uint8_t usb_xfer_size, usb_xfer_flags;
+#if CONFIG_USB_CDC_BRIDGE
+// Optional callback run when an EP0 transfer (including its status stage)
+// finishes
+static void (*usb_xfer_done)(void);
+#endif
 
 // Set the USB "stall" condition
 static void
@@ -335,6 +451,9 @@ usb_do_stall(void)
 {
     usb_stall_ep0();
     usb_xfer_flags = 0;
+#if CONFIG_USB_CDC_BRIDGE
+    usb_xfer_done = NULL;
+#endif
 }
 
 // Transfer data on the usb endpoint 0
@@ -367,6 +486,13 @@ usb_do_xfer(void *data, uint_fast8_t size, uint_fast8_t flags)
                     // Must send zero-length-packet
                     continue;
                 usb_xfer_flags = 0;
+#if CONFIG_USB_CDC_BRIDGE
+                if (usb_xfer_done) {
+                    void (*done)(void) = usb_xfer_done;
+                    usb_xfer_done = NULL;
+                    done();
+                }
+#endif
                 usb_notify_ep0();
                 return;
             }
@@ -442,6 +568,10 @@ usb_req_set_configuration(struct usb_ctrlrequest *req)
     usb_set_configure();
     usb_notify_bulk_in();
     usb_notify_bulk_out();
+#if CONFIG_USB_CDC_BRIDGE
+    usb_notify_bulk_in2();
+    usb_notify_bulk_out2();
+#endif
     usb_do_xfer(NULL, 0, UX_SEND);
 }
 
@@ -493,6 +623,60 @@ usb_req_set_line(struct usb_ctrlrequest *req)
     check_reboot();
 }
 
+#if CONFIG_USB_CDC_BRIDGE
+// Requests addressed to the second CDC function (wIndex == its comm interface)
+#define IS_BRIDGE_REQ(req) ((req)->wIndex == USB_CDC2_IFACE_COMM)
+
+static struct usb_cdc_line_coding bridge_new_coding;
+
+static void
+usb_bridge_coding_done(void)
+{
+    // Data stage and status stage are complete - validate and apply
+    usb_bridge_set_line_coding(&bridge_new_coding);
+}
+
+static void
+usb_req_bridge_set_line_coding(struct usb_ctrlrequest *req)
+{
+    if (req->bRequestType != 0x21 || req->wValue
+        || req->wLength != sizeof(bridge_new_coding)) {
+        usb_do_stall();
+        return;
+    }
+    usb_xfer_done = usb_bridge_coding_done;
+    usb_do_xfer(&bridge_new_coding, sizeof(bridge_new_coding), UX_READ);
+}
+
+static void
+usb_req_bridge_get_line_coding(struct usb_ctrlrequest *req)
+{
+    if (req->bRequestType != 0xa1 || req->wValue
+        || req->wLength < sizeof(struct usb_cdc_line_coding)) {
+        usb_do_stall();
+        return;
+    }
+    usb_do_xfer(usb_bridge_get_line_coding(),
+                sizeof(struct usb_cdc_line_coding), UX_SEND);
+}
+
+static void
+usb_req_bridge_set_line(struct usb_ctrlrequest *req)
+{
+    if (req->bRequestType != 0x21 || req->wLength) {
+        usb_do_stall();
+        return;
+    }
+    usb_bridge_set_control_state(req->wValue);
+    usb_do_xfer(NULL, 0, UX_SEND);
+}
+#else
+#define IS_BRIDGE_REQ(req) 0
+static inline void usb_req_bridge_set_line_coding(struct usb_ctrlrequest *r) {}
+static inline void usb_req_bridge_get_line_coding(struct usb_ctrlrequest *r) {}
+static inline void usb_req_bridge_set_line(struct usb_ctrlrequest *r) {}
+#endif
+
 static void
 usb_state_ready(void)
 {
@@ -504,9 +688,24 @@ usb_state_ready(void)
     case USB_REQ_GET_DESCRIPTOR: usb_req_get_descriptor(&req); break;
     case USB_REQ_SET_ADDRESS: usb_req_set_address(&req); break;
     case USB_REQ_SET_CONFIGURATION: usb_req_set_configuration(&req); break;
-    case USB_CDC_REQ_SET_LINE_CODING: usb_req_set_line_coding(&req); break;
-    case USB_CDC_REQ_GET_LINE_CODING: usb_req_get_line_coding(&req); break;
-    case USB_CDC_REQ_SET_CONTROL_LINE_STATE: usb_req_set_line(&req); break;
+    case USB_CDC_REQ_SET_LINE_CODING:
+        if (IS_BRIDGE_REQ(&req))
+            usb_req_bridge_set_line_coding(&req);
+        else
+            usb_req_set_line_coding(&req);
+        break;
+    case USB_CDC_REQ_GET_LINE_CODING:
+        if (IS_BRIDGE_REQ(&req))
+            usb_req_bridge_get_line_coding(&req);
+        else
+            usb_req_get_line_coding(&req);
+        break;
+    case USB_CDC_REQ_SET_CONTROL_LINE_STATE:
+        if (IS_BRIDGE_REQ(&req))
+            usb_req_bridge_set_line(&req);
+        else
+            usb_req_set_line(&req);
+        break;
     default: usb_do_stall(); break;
     }
 }

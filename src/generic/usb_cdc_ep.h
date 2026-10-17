@@ -16,4 +16,17 @@ enum {
     USB_CDC_EP_BULK_IN_SIZE = 64,
 };
 
+// Endpoints of the optional second CDC function (CONFIG_USB_CDC_BRIDGE)
+enum {
+    USB_CDC2_EP_BULK_IN = 4,
+    USB_CDC2_EP_BULK_OUT = 5,
+    USB_CDC2_EP_ACM = 6,
+};
+
+enum {
+    USB_CDC2_EP_ACM_SIZE = 8,
+    USB_CDC2_EP_BULK_OUT_SIZE = 64,
+    USB_CDC2_EP_BULK_IN_SIZE = 64,
+};
+
 #endif // usb_cdc_ep.h

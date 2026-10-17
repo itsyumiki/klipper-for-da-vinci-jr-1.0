@@ -21,4 +21,10 @@ void usb_notify_bulk_in(void);
 void usb_notify_bulk_out(void);
 void usb_notify_ep0(void);
 
+// second CDC function (CONFIG_USB_CDC_BRIDGE)
+int_fast8_t usb_read_bulk_out2(void *data, uint_fast8_t max_len);
+int_fast8_t usb_send_bulk_in2(void *data, uint_fast8_t len);
+void usb_notify_bulk_in2(void);
+void usb_notify_bulk_out2(void);
+
 #endif // usb_cdc.h
