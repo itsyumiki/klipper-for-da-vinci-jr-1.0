@@ -4650,7 +4650,7 @@ d7_pin:
 #   Set the number of characters per line for an hd44780 type lcd.
 #   Possible values are 20 (default) and 16. The number of lines is
 #   fixed to 4.
-#hd44780_delay: 0.000040
+#hd44780_delay: 0.000100
 #   The minimum time (in seconds) to wait after sending a command
 #   or data byte to the hd44780 chip. Some displays (typically ones
 #   with a slower internal oscillator) need more time than the
@@ -4662,7 +4662,7 @@ d7_pin:
 #   margin (a few microseconds) as the display timing can vary with
 #   temperature. Use the lowest reliable value, as the
 #   micro-controller waits for this delay between every byte sent to
-#   the display. The maximum is 0.000060. The default is 0.000040.
+#   the display. The maximum is 0.000200. The default is 0.000100.
 ...
 ```
 
