@@ -148,4 +148,13 @@ config ATSAM_CANBUS_PB3_PB2
     bool
     default y if ATSAM_MMENU_CANBUS_PB3_PB2 || ATSAM_CMENU_CANBUS_PB3_PB2
 
+config ATSAM_UART1_BRIDGE
+    bool "USB CDC to UART1 bridge (PA5/PA6)"
+    depends on MACH_SAM4E && ATSAM_USB
+    select USB_CDC_BRIDGE
+    help
+        Add a second USB serial port that is bridged byte-for-byte to
+        UART1 (PA5 = RX, PA6 = TX). The Klipper console stays on the
+        first USB serial port.
+
 endif
